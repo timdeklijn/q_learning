@@ -1,12 +1,17 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+pub const Actions = enum(u2) { Up, Right, Down, Left };
+
 pub const Game = struct {
     alloc: Allocator,
     board: Board,
     pos: Position,
 
-    pub const Action = enum { Up, Right, Down, Left };
+    pub fn n_actions(self: Game) usize {
+        _ = self;
+        return @typeInfo(Actions).Enum.fields.len;
+    }
 
     pub fn init(alloc: Allocator, s: []const u8) !Game {
         const b = try Board.init(alloc, s);
@@ -15,26 +20,37 @@ pub const Game = struct {
         return Game{ .alloc = alloc, .board = b, .pos = start_pos };
     }
 
-    pub fn step(self: *Game, action: Action) struct { reward: usize, ok: bool } {
+    pub fn get_pos(self: Game) usize {
+        return self.pos.to_index(self.board.width);
+    }
+
+    pub fn reset_pos(self: *Game) usize {
+        const pos_index = self.board.get_start_pos();
+        self.pos = Position.from_index(pos_index, self.board.width);
+        return pos_index;
+    }
+
+    pub fn step(self: *Game, action: Actions) struct { pos: usize, reward: usize, ok: bool } {
         switch (action) {
             .Up => {
                 if (self.pos.y > 0) self.pos.y -= 1;
             },
             .Right => {
-                if (self.pos.x <= self.board.width - 1) self.pos.x += 1;
+                if (self.pos.x < self.board.width - 1) self.pos.x += 1;
             },
             .Down => {
-                if (self.pos.y <= self.board.height - 1) self.pos.y += 1;
+                if (self.pos.y < self.board.height - 1) self.pos.y += 1;
             },
             .Left => {
                 if (self.pos.x > 0) self.pos.x -= 1;
             },
         }
 
-        switch (self.board.b.items[self.pos.to_index(self.board.width)]) {
-            .Start, .Normal => return .{ .reward = 0, .ok = true },
-            .Hole => return .{ .reward = 0, .ok = false },
-            .Finish => return .{ .reward = 1, .ok = false },
+        const pos = self.get_pos();
+        switch (self.board.b.items[pos]) {
+            .Start, .Normal => return .{ .pos = pos, .reward = 0, .ok = true },
+            .Hole => return .{ .pos = pos, .reward = 0, .ok = false },
+            .Finish => return .{ .pos = pos, .reward = 10, .ok = false },
         }
     }
 
@@ -129,6 +145,25 @@ test "test pos to index" {
 test "test index to pos" {
     const pos = Game.Position.from_index(12, 4);
     try std.testing.expectEqual(0, pos.x);
+    try std.testing.expectEqual(3, pos.y);
+}
+
+test "test_test" {
+    const s =
+        \\S...
+        \\.H..
+        \\..H.
+        \\...F
+    ;
+    const allocator = std.testing.allocator;
+    var game = try Game.init(allocator, s);
+    defer game.deinit();
+    game.pos = Game.Position.from_index(12, game.board.width);
+
+    const r = game.step(.Down);
+    const pos = Game.Position.from_index(r.pos, game.board.width);
+
+    try std.testing.expectEqual(3, pos.x);
     try std.testing.expectEqual(3, pos.y);
 }
 
